@@ -1,0 +1,381 @@
+USE micromobility;
+
+#Ejercicio 1
+
+
+
+DELIMITER //
+
+
+CREATE PROCEDURE RegisterUserWithCard(
+
+    IN p_full_name VARCHAR(100), 
+
+    IN p_email VARCHAR(100), 
+
+    IN p_phone VARCHAR(30), 
+
+    IN p_issue_date DATE,
+
+    OUT p_new_user_id BIGINT UNSIGNED, 
+
+    OUT p_new_card_id BIGINT UNSIGNED,
+
+    INOUT p_status_msg VARCHAR(100)
+
+    )
+
+    BEGIN
+
+    
+
+    
+
+        DECLARE s_email_count INT;
+
+        DECLARE s_phone_count INT;
+
+        SELECT COUNT(*) INTO s_email_count FROM app_user WHERE email = p_email;
+
+        SELECT COUNT(*) INTO s_phone_count FROM app_user WHERE phone = p_phone;
+
+        
+
+        IF s_email_count > 0 THEN
+
+        SET p_status_msg = 'Email already registered. Please insert another email';
+
+        SET p_new_user_id = NULL;
+
+        SET p_new_card_id = NULL;
+
+        
+
+        ELSEIF s_phone_count > 0 THEN
+
+        SET p_status_msg = 'Phone already registered. Please insert another phone number';
+
+        SET p_new_user_id = NULL;
+
+        SET p_new_card_id = NULL;
+
+        
+
+        ELSE
+
+        
+
+        INSERT INTO app_user(full_name, email, phone, created_at) VALUES (p_full_name, p_email, p_phone, p_issue_date);
+
+        
+
+        SET p_new_user_id = LAST_INSERT_ID();
+
+        
+
+        INSERT INTO card (user_id, issue_date, status)
+
+        VALUES (p_new_user_id, p_issue_date, 'active');
+
+        
+
+        SET p_new_card_id = LAST_INSERT_ID();
+
+        
+
+        SET p_status_msg = "Registration successfully completed!";
+
+        
+
+        END IF;
+
+        
+
+        
+
+    END //
+
+    
+
+    DELIMITER  ;
+
+
+
+
+
+
+
+
+#Ejercicio 2
+
+DELIMITER //
+
+
+CREATE PROCEDURE RegisterUserCardAndSubscription(
+
+    IN p_full_name VARCHAR(100),
+
+    IN p_email VARCHAR(100),
+
+    IN p_phone VARCHAR(30),
+
+    IN p_issue_date DATE,
+
+    IN p_plan_id BIGINT UNSIGNED,
+
+    IN p_start_date DATE,
+
+    OUT p_new_user_id BIGINT UNSIGNED,
+
+    OUT p_new_card_id BIGINT UNSIGNED,
+
+    OUT p_new_subscription_id BIGINT UNSIGNED,
+
+    INOUT p_status_msg VARCHAR(100)
+
+    )
+
+    
+
+    BEGIN
+
+    
+
+        DECLARE s_email_count INT;
+
+        DECLARE s_phone_count INT;
+
+        DECLARE s_plan_count INT;
+
+        DECLARE s_active_plan INT DEFAULT 0;
+
+
+        DECLARE EXIT HANDLER FOR SQLEXCEPTION
+
+        BEGIN
+
+        ROLLBACK;
+
+        SET p_status_msg = 'Transaction failed';
+
+        SET p_new_user_id = NULL;
+
+        SET p_new_card_id = NULL;
+
+        SET p_new_subscription_id = NULL;
+
+        END;
+
+
+        SELECT COUNT(*) INTO s_email_count FROM app_user WHERE email = p_email;
+
+        SELECT COUNT(*) INTO s_phone_count FROM app_user WHERE phone = p_phone;
+
+        SELECT COUNT(*) INTO s_plan_count FROM tariff_plan WHERE plan_id = p_plan_id;
+
+        SELECT IFNULL(is_active, 0) INTO s_active_plan FROM tariff_plan WHERE plan_id = p_plan_id;
+
+        
+
+        IF s_email_count > 0 THEN
+
+        SET p_status_msg = 'Email already registered. Please insert another email';
+
+        SET p_new_user_id = NULL;
+
+        SET p_new_card_id = NULL;
+
+        SET p_new_subscription_id = NULL;
+
+        
+
+        ELSEIF s_phone_count > 0 THEN
+
+        SET p_status_msg = 'Phone already registered. Please insert another phone number';
+
+        SET p_new_user_id = NULL;
+
+        SET p_new_card_id = NULL;
+
+        SET p_new_subscription_id = NULL;
+
+        
+
+        ELSEIF s_plan_count = 0 THEN
+
+        SET p_status_msg = 'The Tariff Plan does not exist';
+
+        SET p_new_user_id = NULL;
+
+        SET p_new_card_id = NULL;
+
+        SET p_new_subscription_id = NULL;
+
+        
+
+        ELSEIF s_active_plan = 0 THEN
+
+        SET p_status_msg = 'The Tariff Plan is not active';
+
+        SET p_new_user_id = NULL;
+
+        SET p_new_card_id = NULL;
+
+        SET p_new_subscription_id = NULL;
+
+        
+
+    ELSE
+
+    
+
+    START TRANSACTION;
+
+    
+
+    INSERT INTO app_user(full_name, email, phone, created_at) VALUES (p_full_name, p_email, p_phone, p_issue_date);
+
+        SET p_new_user_id = LAST_INSERT_ID();
+
+        
+
+    INSERT INTO card (user_id, issue_date, status) VALUES (p_new_user_id, p_issue_date, 'active');
+
+        SET p_new_card_id = LAST_INSERT_ID();
+
+        
+
+    INSERT INTO subscription (user_id, plan_id, start_date, status) VALUES (p_new_user_id, p_plan_id, p_start_date, 'active');
+
+    SET p_new_subscription_id = LAST_INSERT_ID();
+
+    
+
+    COMMIT;
+
+    
+
+    SET p_status_msg = "Registration successfully completed!";
+
+    END IF;
+
+    
+
+    END //
+
+    
+
+    DELIMITER ; 
+    
+    
+    #Ejercicio 3
+    
+
+   DELIMITER //
+
+    
+
+    CREATE PROCEDURE GenerateFinishedRideSummary(
+
+    OUT p_ride_summary VARCHAR(5000))
+
+    BEGIN
+
+    
+
+    DECLARE done INT DEFAULT FALSE;
+
+    DECLARE s_ride_id INT;
+
+    DECLARE s_vehicle_id INT;
+
+    DECLARE s_distance_km DECIMAL (7,3);
+
+    DECLARE s_cost DECIMAL (10,2);
+
+    DECLARE s_summary VARCHAR(5000) DEFAULT '';
+
+    
+
+
+DECLARE ride_cursor CURSOR FOR SELECT ride_id, vehicle_id, distance_km, cost FROM ride WHERE status = 'finished';
+
+
+DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+
+
+OPEN ride_cursor;
+
+
+read_loop: LOOP
+
+    
+
+    FETCH ride_cursor INTO s_ride_id, s_vehicle_id, s_distance_km, s_cost;
+
+        IF done THEN
+
+            LEAVE read_loop;
+
+        END IF;
+
+        
+
+    
+    SET s_summary = CONCAT(s_summary,'|','Ride ', s_ride_id, '|','Vehicle ', s_vehicle_id, '|', s_distance_km,' km', '|', s_cost,' €'); 
+
+        
+
+        SELECT s_ride_id, s_vehicle_id, s_distance_km, s_cost;
+
+
+    END LOOP;
+
+    
+
+    CLOSE ride_cursor;
+
+    
+
+    SET p_ride_summary = s_summary;
+
+    
+
+    END // 
+
+
+SET @summary = '';
+
+
+SELECT * FROM tariff_plan;
+#Test1.1 valid user
+CALL RegisterUserWithCard('Manolo Gomez','Manolo@mymail.com','111111111',CURDATE(),@user_id,@card_id,@status);
+
+SELECT @user_id AS userID, @card_id AS cardID, @status AS Mensaje;
+
+#test1.2 email already registered
+CALL RegisterUserWithCard('Sofia Ruiz','sofia.ruiz@example.com','222222222',CURDATE(),@user_id,@card_id,@status);
+
+#test 1.3 phone already registered
+CALL RegisterUserWithCard('Paco Porras','Porras@mail.com','111111111',CURDATE(),@user_id,@card_id,@status);
+
+#test 2.1
+CALL RegisterUserCardAndSubscription('Manolete Garcia','manolete@mail.com',123777777,CURDATE(),1,CURDATE(),@user_id,@card_id,@subscription_id,@status);
+
+SELECT @user_id AS userID, @card_id AS cardID,@subscription_id AS SubscriptionID, @status AS Mensaje;
+
+#test 2.2
+CALL RegisterUserCardAndSubscription('Manolete Garcia','manolete@mail.com',123777778,CURDATE(),1,CURDATE(),@user_id,@card_id,@subscription_id,@status);
+
+#test 2.3
+
+CALL RegisterUserCardAndSubscription('Nemesio','Nemesio@mail.com',123777777,CURDATE(),2,CURDATE(),@user_id,@card_id,@subscription_id,@status);
+
+#test 2.3
+CALL RegisterUserCardAndSubscription('Pipi Ortega','Pipi@mail.com',123779777,CURDATE(),0,CURDATE(),@user_id,@card_id,@subscription_id,@status);
+
+#test 3.1
+
+CALL GenerateFinishedRideSummary(@summary);
+
+SELECT @summary AS finished_ride_summary;
